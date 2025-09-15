@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Slide Maker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Libraries for Exporting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .slide-container {
+            aspect-ratio: 16 / 9;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease-in-out;
+        }
+        .slide {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .slide.active {
+            display: flex;
+            opacity: 1;
+        }
+        .loader {
+            border-top-color: #3498db;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        #export-dropdown-menu {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-4">
+
+    <div id="app" class="w-full max-w-5xl mx-auto">
+        
+        <!-- Input Section -->
+        <div id="input-section" class="bg-white p-8 rounded-xl shadow-lg transition-all duration-500">
+            <div class="text-center mb-6">
+                <h1 class="text-4xl font-bold text-gray-800">AI Slide Maker</h1>
+                <p class="text-gray-500 mt-2">Masukkan topik Anda, pilih gaya gambar, dan biarkan AI membuat presentasi untuk Anda.</p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-4">
+                <input type="text" id="topic-input" class="flex-grow w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Contoh: Sejarah Kecerdasan Buatan">
+                <button id="generate-btn" class="w-full sm:w-auto bg-blue-600 text-white font-semibold px-6 py-3 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-300">
+                    Buat Slide
+                </button>
+            </div>
+             <div class="mt-6 text-center">
+                <p class="text-gray-600 font-medium mb-3">Pilih Gaya Gambar:</p>
+                <div class="flex justify-center items-center gap-6">
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="radio" name="imageStyle" value="realistic" class="form-radio h-5 w-5 text-blue-600" checked>
+                        <span class="text-gray-700">Realisitis</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="radio" name="imageStyle" value="illustrative" class="form-radio h-5 w-5 text-blue-600">
+                        <span class="text-gray-700">Ilustratif</span>
+                    </label>
+                </div>
+            </div>
+             <div id="error-message" class="text-red-500 mt-4 text-center hidden"></div>
+        </div>
+
+        <!-- Loading Section -->
+        <div id="loading-section" class="text-center p-8 hidden">
+            <div class="loader ease-linear rounded-full border-8 border-t-8 border-gray-200 h-32 w-32 mx-auto"></div>
+            <h2 class="text-2xl font-semibold mt-8 text-gray-700">AI sedang bekerja...</h2>
+            <p id="loading-status" class="text-gray-500 mt-2">Membuat konten teks... Harap tunggu sejenak.</p>
+        </div>
+
+        <!-- Presentation Section -->
+        <div id="presentation-section" class="hidden">
+            <h2 id="presentation-title" class="text-3xl font-bold text-center mb-6"></h2>
+            
+            <div id="slide-container" class="slide-container w-full bg-white rounded-lg overflow-hidden relative flex items-center justify-center p-4">
+                <!-- Slides will be injected here -->
+            </div>
+
+            <div class="flex items-center justify-between mt-6">
+                <div class="flex gap-2">
+                    <button id="new-presentation-btn" class="bg-gray-200 text-gray-700 font-semibold px-5 py-2 rounded-lg hover:bg-gray-300 transition-colors">Buat Baru</button>
+                    <div class="relative">
+                         <button id="export-btn" class="bg-green-600 text-white font-semibold px-5 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2">
+                            <span>Ekspor</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                         </button>
+                         <div id="export-dropdown-menu" class="absolute bottom-full mb-2 w-40 bg-white rounded-md shadow-lg border">
+                             <a href="#" id="export-pdf-btn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Ekspor ke PDF</a>
+                             <a href="#" id="export-pptx-btn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Ekspor ke PPTX</a>
+                         </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <button id="prev-btn" class="bg-blue-600 text-white font-semibold px-5 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">&lt; Sebelumnya</button>
+                    <span id="slide-counter" class="text-lg font-medium text-gray-600"></span>
+                    <button id="next-btn" class="bg-blue-600 text-white font-semibold px-5 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">Selanjutnya &gt;</button>
+                </div>
+                 <div class="w-28 text-right">
+                    <button id="fullscreen-btn" class="bg-gray-200 p-2 rounded-lg hover:bg-gray-300 transition-colors" title="Layar Penuh">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-arrows-fullscreen" viewBox="0 0 16 16">
+                            <path fill-rule="evenodd" d="M5.828 10.172a.5.5 0 0 0-.707 0l-4.096 4.096V11.5a.5.5 0 0 0-1 0v3.975a.5.5 0 0 0 .5.5H4.5a.5.5 0 0 0 0-1H1.732l4.096-4.096a.5.5 0 0 0 0-.707zm4.344 0a.5.5 0 0 1 .707 0l4.096 4.096V11.5a.5.5 0 1 1 1 0v3.975a.5.5 0 0 1-.5.5H11.5a.5.5 0 0 1 0-1h2.768l-4.096-4.096a.5.5 0 0 1 0-.707zm0-4.344a.5.5 0 0 0 .707 0l4.096-4.096V4.5a.5.5 0 1 0 1 0V.525a.5.5 0 0 0-.5-.5H11.5a.5.5 0 0 0 0 1h2.768l-4.096 4.096a.5.5 0 0 0 0 .707zm-4.344 0a.5.5 0 0 1-.707 0L1.025 1.732V4.5a.5.5 0 0 1-1 0V.525a.5.5 0 0 1 .5-.5H4.5a.5.5 0 0 1 0 1H1.732l4.096 4.096a.5.5 0 0 1 0 .707z"/>
+                        </svg>
+                    </button>
+                 </div>
+            </div>
+
+            <div class="mt-8 bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-semibold mb-3">Catatan Pembicara:</h3>
+                <p id="speaker-notes" class="text-gray-600 leading-relaxed"></p>
+            </div>
+        </div>
+        
+        <!-- Export Loading Overlay -->
+        <div id="export-overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white p-6 rounded-lg text-center">
+                <div class="loader ease-linear rounded-full border-8 border-t-8 border-gray-200 h-16 w-16 mx-auto"></div>
+                <p id="export-status" class="mt-4 text-gray-700 font-semibold">Mengekspor presentasi...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const topicInput = document.getElementById('topic-input');
+        const generateBtn = document.getElementById('generate-btn');
+        const inputSection = document.getElementById('input-section');
+        const loadingSection = document.getElementById('loading-section');
+        const loadingStatus = document.getElementById('loading-status');
+        const presentationSection = document.getElementById('presentation-section');
+        const presentationTitle = document.getElementById('presentation-title');
+        const slideContainer = document.getElementById('slide-container');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const slideCounter = document.getElementById('slide-counter');
+        const speakerNotes = document.getElementById('speaker-notes');
+        const newPresentationBtn = document.getElementById('new-presentation-btn');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const errorMessage = document.getElementById('error-message');
+        const exportBtn = document.getElementById('export-btn');
+        const exportDropdownMenu = document.getElementById('export-dropdown-menu');
+        const exportPdfBtn = document.getElementById('export-pdf-btn');
+        const exportPptxBtn = document.getElementById('export-pptx-btn');
+        const exportOverlay = document.getElementById('export-overlay');
+        const exportStatus = document.getElementById('export-status');
+
+        let slidesData = [];
+        let currentSlide = 0;
+
+        // --- Event Listeners ---
+        generateBtn.addEventListener('click', handleGeneration);
+        topicInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleGeneration(); });
+        prevBtn.addEventListener('click', showPreviousSlide);
+        nextBtn.addEventListener('click', showNextSlide);
+        newPresentationBtn.addEventListener('click', resetApp);
+        fullscreenBtn.addEventListener('click', toggleFullScreen);
+        exportBtn.addEventListener('click', () => {
+            exportDropdownMenu.style.display = exportDropdownMenu.style.display === 'block' ? 'none' : 'block';
+        });
+        document.addEventListener('click', (e) => {
+            if (!exportBtn.contains(e.target)) {
+                exportDropdownMenu.style.display = 'none';
+            }
+        });
+        exportPdfBtn.addEventListener('click', exportToPDF);
+        exportPptxBtn.addEventListener('click', exportToPPTX);
+        
+        // --- Core Functions ---
+        async function handleGeneration() {
+            const topic = topicInput.value.trim();
+            if (!topic) {
+                showError('Topik tidak boleh kosong.');
+                return;
+            }
+            hideError();
+            switchToLoadingView();
+
+            try {
+                loadingStatus.textContent = 'Menghubungi AI... Ini mungkin akan memakan waktu.';
+                const imageStyle = document.querySelector('input[name="imageStyle"]:checked').value;
+
+                // Call our own backend proxy instead of Google directly
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic, imageStyle })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `Terjadi kesalahan server (${response.status})`);
+                }
+
+                const presentationContent = await response.json();
+                
+                if (!presentationContent.slides || presentationContent.slides.length === 0) {
+                     throw new Error("AI tidak mengembalikan slide. Coba lagi.");
+                }
+
+                slidesData = presentationContent.slides;
+                presentationTitle.textContent = presentationContent.presentationTitle;
+                
+                currentSlide = 0;
+                renderSlides();
+                switchToPresentationView();
+
+            } catch (error) {
+                console.error("Error during generation pipeline:", error);
+                showError(`Terjadi kesalahan: ${error.message}. Silakan coba lagi.`);
+                resetApp();
+            }
+        }
+
+        function renderSlides() {
+            slideContainer.innerHTML = '';
+            slidesData.forEach((slide, index) => {
+                const slideElement = document.createElement('div');
+                slideElement.className = 'slide absolute inset-0 w-full h-full p-6 md:p-8';
+                slideElement.id = `slide-${index}`;
+                if (index === 0) {
+                    slideElement.classList.add('flex', 'flex-col', 'items-center', 'justify-center', 'text-center');
+                    slideElement.innerHTML = `<div class="w-full h-full absolute inset-0 bg-cover bg-center" style="background-image: url('${slide.imageUrl}');"><div class="w-full h-full bg-black/50 flex flex-col items-center justify-center p-8"><h3 class="text-5xl font-bold text-white">${slide.title}</h3>${slide.content.length > 0 ? `<p class="text-2xl mt-4 text-gray-200">${slide.content[0]}</p>` : ''}</div></div>`;
+                } else {
+                    slideElement.classList.add('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-8', 'items-center');
+                    slideElement.innerHTML = `<div class="flex flex-col justify-center"><h3 class="text-3xl lg:text-4xl font-bold mb-6">${slide.title}</h3><ul class="text-lg lg:text-xl text-left space-y-4 max-w-2xl">${slide.content.map(point => `<li class="flex items-start"><span class="text-blue-500 mr-3 mt-1">&#9679;</span><span>${point}</span></li>`).join('')}</ul></div><div class="w-full h-full flex items-center justify-center rounded-lg overflow-hidden"><img src="${slide.imageUrl}" alt="${slide.title}" class="w-full h-full object-cover"></div>`;
+                }
+                slideContainer.appendChild(slideElement);
+            });
+            showSlide(currentSlide);
+        }
+        
+        // --- Export Functions ---
+        async function exportToPDF() {
+            exportStatus.textContent = 'Mengekspor ke PDF... (0%)';
+            exportOverlay.classList.remove('hidden');
+
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1280, 720] });
+            const slideElements = document.querySelectorAll('.slide');
+
+            for (let i = 0; i < slideElements.length; i++) {
+                const slide = slideElements[i];
+                const progress = Math.round(((i + 1) / slideElements.length) * 100);
+                exportStatus.textContent = `Mengekspor ke PDF... (${progress}%)`;
+                
+                const canvas = await html2canvas(slide, { scale: 2, useCORS: true });
+                const imgData = canvas.toDataURL('image/jpeg', 0.9);
+                
+                if (i > 0) pdf.addPage([1280, 720], 'landscape');
+                
+                pdf.addImage(imgData, 'JPEG', 0, 0, 1280, 720);
+            }
+
+            pdf.save(`${presentationTitle.textContent || 'presentasi'}.pdf`);
+            exportOverlay.classList.add('hidden');
+        }
+
+        async function exportToPPTX() {
+            exportStatus.textContent = 'Mengekspor ke PPTX...';
+            exportOverlay.classList.remove('hidden');
+
+            let pptx = new PptxGenJS();
+            pptx.layout = 'LAYOUT_16x9';
+
+            for (const [index, slide] of slidesData.entries()) {
+                 const progress = Math.round(((index + 1) / slidesData.length) * 100);
+                 exportStatus.textContent = `Mengekspor ke PPTX... (${progress}%)`;
+
+                let slideObj = pptx.addSlide();
+                
+                if (index === 0) {
+                    slideObj.background = { data: slide.imageUrl };
+                    slideObj.addText(slide.title, { x: 0.5, y: 2.5, w: '90%', h: 1, align: 'center', fontSize: 48, color: 'FFFFFF', bold: true, shadow: { type: 'outer', color: '000000', blur: 3, offset: 3, angle: 45, opacity: 0.6 } });
+                    if (slide.content.length > 0) {
+                        slideObj.addText(slide.content[0], { x: 0.5, y: 3.5, w: '90%', h: 1, align: 'center', fontSize: 28, color: 'F1F1F1', shadow: { type: 'outer', color: '000000', blur: 3, offset: 2, angle: 45, opacity: 0.6 } });
+                    }
+                } else {
+                    slideObj.addText(slide.title, { x: 0.5, y: 0.25, w: '50%', h: 0.75, fontSize: 32, bold: true });
+                    slideObj.addText(
+                        slide.content.map(point => ({ text: point, options: { breakLine: true } })),
+                        { x: 0.5, y: 1.2, w: '50%', h: '75%', bullet: true, fontSize: 18 }
+                    );
+                    slideObj.addImage({ data: slide.imageUrl, x: 5.5, y: 1.2, w: 4.0, h: 4.5 });
+                }
+                
+                slideObj.addNotes(slide.speakerNotes);
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            pptx.writeFile({ fileName: `${presentationTitle.textContent || 'presentasi'}.pptx` });
+            exportOverlay.classList.add('hidden');
+        }
+
+        // --- UI State Management ---
+        function showSlide(index) {
+            document.querySelectorAll('.slide').forEach((s, i) => s.classList.toggle('active', i === index));
+            speakerNotes.textContent = slidesData[index]?.speakerNotes || "Tidak ada catatan untuk slide ini.";
+            updateControls();
+        }
+
+        function updateControls() {
+            slideCounter.textContent = `${currentSlide + 1} / ${slidesData.length}`;
+            prevBtn.disabled = currentSlide === 0;
+            nextBtn.disabled = currentSlide === slidesData.length - 1;
+        }
+
+        function showNextSlide() {
+            if (currentSlide < slidesData.length - 1) showSlide(++currentSlide);
+        }
+
+        function showPreviousSlide() {
+            if (currentSlide > 0) showSlide(--currentSlide);
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                slideContainer.requestFullscreen().catch(err => {
+                    alert(`Gagal mengaktifkan mode layar penuh: ${err.message}`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function switchToLoadingView() {
+            inputSection.classList.add('hidden');
+            presentationSection.classList.add('hidden');
+            loadingSection.classList.remove('hidden');
+            loadingStatus.textContent = 'Mempersiapkan...';
+        }
+
+        function switchToPresentationView() {
+            inputSection.classList.add('hidden');
+            loadingSection.classList.add('hidden');
+            presentationSection.classList.remove('hidden');
+        }
+
+        function resetApp() {
+            topicInput.value = '';
+            slidesData = [];
+            currentSlide = 0;
+            hideError();
+            presentationSection.classList.add('hidden');
+            loadingSection.classList.add('hidden');
+            inputSection.classList.remove('hidden');
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.remove('hidden');
+        }
+
+        function hideError() {
+            errorMessage.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
+
