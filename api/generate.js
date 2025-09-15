@@ -13,21 +13,38 @@ async function generateSlideContent(topic, apiKey) {
     if (candidate && candidate.content?.parts?.[0]?.text) { return JSON.parse(candidate.content.parts[0].text);} else { throw new Error("Respons dari AI teks tidak valid.");}
 }
 
-// Fungsi untuk memanggil API Gambar Google
+// Fungsi untuk memanggil API Gambar Google (diperbarui ke Imagen 3)
 async function generateImageFromPrompt(prompt, style, apiKey) {
-    const fullPrompt = style === 'realistic' ? `A cinematic, photorealistic, high-quality photograph of: ${prompt}.` : `A clean, simple, illustrative, digital art style, vector illustration of: ${prompt}.`;
-    const payload = {contents: [{parts: [{ text: fullPrompt }]}], generationConfig: {responseModalities: ['IMAGE']},};
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
-    
-    const response = await fetch(apiUrl, {method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)});
-    if (!response.ok) throw new Error(`API Error (Image): ${response.status}`);
+    const fullPrompt = style === 'realistic'
+        ? `A cinematic, high-quality, photorealistic photograph of: ${prompt}.`
+        : `A clean, simple, illustrative, digital art style, vector illustration of: ${prompt}.`;
+
+    const payload = {
+        instances: [{ prompt: fullPrompt }],
+        parameters: { "sampleCount": 1 }
+    };
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+
+    const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+        const errorBody = await response.text();
+        console.error("Image API Error Body:", errorBody);
+        throw new Error(`API Error (Image): ${response.status} ${response.statusText}`);
+    }
+
     const result = await response.json();
-    const base64Data = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
-    if (base64Data) { return `data:image/png;base64,${base64Data}`;} 
-    else {
-        const safetyRatings = result?.candidates?.[0]?.safetyRatings;
-        if (safetyRatings) { console.warn('Image generation blocked:', safetyRatings); throw new Error("Gambar diblokir oleh filter keamanan.");}
-        throw new Error("Respons data gambar tidak valid.");
+    const prediction = result.predictions?.[0];
+
+    if (prediction && prediction.bytesBase64Encoded) {
+        return `data:image/png;base64,${prediction.bytesBase64Encoded}`;
+    } else {
+        console.warn('Image generation failed, response:', result);
+        throw new Error("Respons data gambar tidak valid dari model Imagen.");
     }
 }
 
@@ -44,7 +61,6 @@ export default async function handler(request, response) {
             return response.status(400).json({ error: 'Topik dan gaya gambar diperlukan' });
         }
         
-        // Ambil API key dari environment variable yang aman
         const apiKey = process.env.GOOGLE_API_KEY;
         if (!apiKey) {
             throw new Error("GOOGLE_API_KEY tidak diatur di server.");
@@ -81,3 +97,4 @@ export default async function handler(request, response) {
         response.status(500).json({ error: error.message });
     }
 }
+
